@@ -1,0 +1,19 @@
+{
+  "name": "dsh-cron",
+  "version": "0.1.0",
+  "description": "Workspace cron automations for dsh: scheduled prompts fired as fresh sessions, managed via tools and /cron commands.",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {
+    "croner": "^10.0.1"
+  }
+}

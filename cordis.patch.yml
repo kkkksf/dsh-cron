@@ -1,0 +1,8 @@
+# dsh-cron bundle patch: inserts the plugin entry into any profile that
+# lists "dsh-cron" in dsh.profile.bundles.
+- insert:
+    - id: dsh-cron
+      name: dsh-cron
+      config:
+        tickMs: 5000
+        defaultTimeZone: Asia/Shanghai

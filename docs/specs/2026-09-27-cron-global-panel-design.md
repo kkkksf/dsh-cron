@@ -27,13 +27,12 @@
 宿主（dsh-cron Node 半体）
   CronRemoteService extends TypertRemoteService(ctx, 'cron')
     list / create / update / toggle / delete / history
-    发射 'cron/changed' 事件
     复用 store.js 原子写入 + domain.js 校验
         |  typert gateway（动态发现 typertRemote 绑定）
         v
 浏览器半体（lib/client.js，经 dsh.client 清单下发的 cordis 客户端插件）
   remote.$mount({ package: 'dsh-cron', descriptors })  ->  ctx.remote.cron
-  catalog 源：list() + 订阅 'cron/changed' + 'connection/reset'
+  catalog 源：list() 轮询（面板可见期间每 5s + 每次写操作后 + connection/reset）
   sidebar.panellist 条目（id 'cron'，order 20）+ keyed main 插槽 'cron'
   master-detail 页面：列表 / 详情 / 表单 / 运行历史
 ```
@@ -58,13 +57,17 @@
 |---|---|---|
 | `list()` | — | `{ workspaces: {id,name,path}[], automations: CatalogEntry[] }`，含算好的 `nextRunAt` 与最近一次运行状态 |
 | `create(request)` | `{ workspaceId, title, prompt, model, schedule（三选一：cronExpression+timeZone / delayMinutes / interval+unit）, maxRuns? }` | 新建的 `CatalogEntry` |
-| `update(request)` | `{ id, expected: {nextAtMs}, 变更字段… }` | 更新后的 entry；`nextAtMs` 不匹配 → `cron_conflict`（对调度器的乐观锁） |
+| `update(request)` | `{ id, expected: {nextAtMs}, 变更字段… }` | `{ outcome: 'updated' \| 'conflict', entry }`；`nextAtMs` 不匹配 → `outcome:'conflict'` 并附最新 entry（对调度器的乐观锁；不用错误分支，避免依赖传输层错误码） |
 | `toggle(request)` | `{ id, enabled }` | entry；停用清 `nextAt`，启用按 `resumeNextAtMs` 重算 |
 | `delete(request)` | `{ id }` | `{ id, deleted }`（连带删除 run 记录） |
 | `history(request)` | `{ id, limit? }` | `{ runs: RunRecord[] }`（时间、状态、耗时、产生的 sessionId） |
 
-事件 `cron/changed`：每次写操作和调度器推进后广播，载荷为变更的自动化 id
-列表。客户端同时监听 `connection/reset` 做全量重拉。
+刷新策略（2026-09-28 修订）：浏览器转发事件白名单（api-remotes 的
+`API_REMOTE_FORWARDED_EVENTS`）是 dsh 仓库内的编译期常量，外部插件的
+`cron/changed` 进不去，因此实时性用轮询实现：面板可见期间每 5 秒 `list()`、
+每次写操作后立即重拉、`connection/reset` 后全量重拉。调度器 tick 本身是 5s
+粒度，轮询不损失可感知的时效。写操作的返回值直接携带最新 entry，本地立即
+应用。
 
 实现要点：
 
@@ -87,9 +90,9 @@
   编辑 / 启停 / 删除操作。删除用行内二次确认，不用 `confirm()`。
 - 表单（新建/编辑）：标题、工作区下拉（默认当前会话的工作区）、模型路由文本框
   （默认会话当前路由，格式校验）、调度选择器（三种，与 `cron_create` 对齐）、
-  maxRuns、提示词文本域。校验错误行内显示。保存遇 `cron_conflict` → 行内提示
-  「任务已被修改，已刷新为最新值」，绝不静默覆盖。编辑期间任务被外部修改 →
-  顶部出现「已有更新」提示条，不强制打断输入。
+  maxRuns、提示词文本域。校验错误行内显示。保存遇 `outcome:'conflict'` → 行内
+  提示「任务已被修改，已刷新为最新值」，绝不静默覆盖。编辑期间轮询发现任务被
+  外部修改 → 顶部出现「已有更新」提示条，不强制打断输入。
 - 空态：未选中任务时显示引导。
 
 ## 样式、本地化与文件组织

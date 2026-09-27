@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const FILES = ['catalog.js', 'list.js', 'detail-source.js', 'detail.js', 'page.js', 'entry.js']
+const FILES = ['catalog.js', 'list.js', 'detail-source.js', 'detail.js', 'form-logic.js', 'form.js', 'page.js', 'entry.js']
 
 /** One module's browser-half text: imports stripped, exports localized. */
 function transform(source) {
@@ -52,5 +52,9 @@ ${body.replace(/^/gm, '\t\t')}
 `
 
 mkdirSync(join(root, 'lib'), { recursive: true })
+if (/^export /m.test(body)) {
+  console.error('build-client: unhandled `export` statement survived the transform — extend the transform')
+  process.exit(1)
+}
 writeFileSync(join(root, 'lib/client.js'), artifact, 'utf8')
 console.log(`built lib/client.js (${artifact.length} bytes)`)

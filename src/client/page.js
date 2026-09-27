@@ -7,6 +7,7 @@
 import { createElement as h, useState, useEffect } from 'react'
 import { filterAutomations, scheduleSummary, relativeTime } from './list.js'
 import { DetailPane } from './detail.js'
+import { CronForm } from './form.js'
 
 /** Local subscription over one observable snapshot prop (dsh-memory pattern). */
 function useSnapshot(source) {
@@ -50,22 +51,83 @@ function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
   )
 }
 
-/** The cron panel page: toolbar + list on the left, detail on the right. */
+/** The cron panel page: toolbar + list on the left, detail/form on the right. */
 export function CronPage(props) {
   const source = props.catalogSource
   const snapshot = source ? useSnapshot(source) : { phase: 'loading', automations: [] }
   const automations = snapshot.automations ?? []
   const workspaces = snapshot.workspaces ?? []
   const t = props.t ?? (() => '')
+  const call = props.call
+  const refresh = props.refresh ?? (() => {})
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [selectedId, setSelectedId] = useState(null)
+  const [formMode, setFormMode] = useState('none') // 'none' | 'create' | 'edit'
   const visible = filterAutomations(automations, { query, status })
   const selected = selectedId === null
     ? null
     : (automations.find(entry => entry.id === selectedId) ?? null)
 
-  return h('div', { className: `dsh-cron-page${selected !== null ? ' dsh-cron-has-detail' : ''}` },
+  /** Submit the form over create/update; returns the form's outcome token. */
+  const submitForm = async (draft, wire) => {
+    if (formMode === 'create') {
+      const result = await call('create', wire)
+      if (result.ok !== true) return String(result.error?.message ?? result.error)
+      setFormMode('none')
+      setSelectedId(result.value?.id ?? null)
+      await refresh()
+      return true
+    }
+    const result = await call('update', {
+      id: selected?.id,
+      expectedNextAt: selected?.nextAt ?? null,
+      changes: {
+        title: wire.title,
+        prompt: wire.prompt,
+        model: wire.model,
+        ...(wire.max_runs === null ? {} : { max_runs: wire.max_runs }),
+        selector: wire.selector,
+      },
+    })
+    if (result.ok !== true) return String(result.error?.message ?? result.error)
+    await refresh()
+    if (result.value?.outcome === 'conflict') return 'conflict'
+    setFormMode('none')
+    return true
+  }
+
+  const detailOrForm = formMode === 'none'
+    ? h(DetailPane, {
+      entry: selected, workspaces,
+      call,
+      openSession: props.openSession ?? null,
+      onEdit: selected === null ? null : () => { setFormMode('edit') },
+      onToggle: selected === null ? null : async () => {
+        const result = await call('toggle', { id: selected.id, enabled: selected.status !== 'active' })
+        if (result.ok === true) await refresh()
+        return result
+      },
+      onDelete: selected === null ? null : async () => {
+        const result = await call('delete', { id: selected.id })
+        if (result.ok === true) { setSelectedId(null); await refresh() }
+        return result
+      },
+      t,
+    })
+    : h(CronForm, {
+      mode: formMode,
+      entry: formMode === 'edit' ? selected : null,
+      workspaces,
+      defaultWorkspaceId: props.defaultWorkspaceId,
+      defaultModel: props.defaultModel,
+      defaultTimeZone: props.defaultTimeZone,
+      onSubmit: submitForm,
+      onCancel: () => { setFormMode('none') },
+      t,
+    })
+
+  return h('div', { className: `dsh-cron-page${selected !== null || formMode !== 'none' ? ' dsh-cron-has-detail' : ''}` },
     snapshot.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' },
       `${t('error')}: ${snapshot.error ?? ''}`),
     h('div', { className: 'dsh-cron-master' },
@@ -82,22 +144,20 @@ export function CronPage(props) {
               key: value, value, active: status === value,
               label: t(`filter.${value}`), onSelect: setStatus,
             }))),
-      ),
+        h('button', {
+          type: 'button', className: 'dsh-cron-new',
+          onClick: () => { setSelectedId(null); setFormMode('create') },
+        }, t('form.new'))),
       snapshot.phase === 'loading' && h('p', { className: 'dsh-cron-hint' }, t('loading')),
       h('div', { className: 'dsh-cron-list', role: 'list' },
         visible.length === 0 && snapshot.phase === 'ready' && h('p', { className: 'dsh-cron-hint' }, t('list.empty')),
         visible.map(entry => h(AutomationRow, {
           key: entry.id, entry, workspaces, selected: entry.id === selectedId,
-          onSelect: setSelectedId, t,
+          onSelect: id => { setFormMode('none'); setSelectedId(id) },
+          t,
         }))),
     ),
-    h(DetailPane, {
-      entry: selected, workspaces,
-      call: props.call ?? null,
-      openSession: props.openSession ?? null,
-      onEdit: props.onEdit ?? null, onToggle: props.onToggle ?? null, onDelete: props.onDelete ?? null,
-      t,
-    }),
+    detailOrForm,
   )
 }
 

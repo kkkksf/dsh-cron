@@ -32,7 +32,7 @@ function RunRow({ run, openSession, t }) {
 }
 
 /** The detail pane for the selected automation. */
-export function DetailPane({ entry, workspaces, call, openSession, onEdit, onToggle, onDelete, t }) {
+export function DetailPane({ entry, workspaces, call, openSession, offline = false, onEdit, onToggle, onDelete, t }) {
   const [historySource] = useState(() => createHistorySource({ call }))
   const [historyLimit, setHistoryLimit] = useState(10)
   const [snap, setSnap] = useState(() => historySource.hooks.history.getSnapshot())
@@ -54,7 +54,7 @@ export function DetailPane({ entry, workspaces, call, openSession, onEdit, onTog
       h('p', { className: 'dsh-cron-hint' }, t('detail.empty')))
   }
 
-  const busy = actionState.phase === 'busy'
+  const busy = actionState.phase === 'busy' || offline
   const runToggle = () => {
     void feedbackMachine.run('toggle', async () => onToggle())
   }

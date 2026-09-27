@@ -6,6 +6,7 @@
 
 import { createElement as h, useState, useEffect } from 'react'
 import { filterAutomations, scheduleSummary, relativeTime } from './list.js'
+import { withDefaults } from './catalog.js'
 import { DetailPane } from './detail.js'
 import { CronForm } from './form.js'
 
@@ -54,9 +55,11 @@ function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
 /** The cron panel page: toolbar + list on the left, detail/form on the right. */
 export function CronPage(props) {
   const source = props.catalogSource
-  const snapshot = source ? useSnapshot(source) : { phase: 'loading', automations: [] }
-  const automations = snapshot.automations ?? []
-  const workspaces = snapshot.workspaces ?? []
+  const rawSnapshot = source ? useSnapshot(source) : null
+  const snapshot = withDefaults(rawSnapshot)
+  const automations = snapshot.automations
+  const workspaces = snapshot.workspaces
+  const offline = snapshot.phase === 'error'
   const t = props.t ?? (() => '')
   const call = props.call
   const refresh = props.refresh ?? (() => {})
@@ -102,6 +105,7 @@ export function CronPage(props) {
       entry: selected, workspaces,
       call,
       openSession: props.openSession ?? null,
+      offline,
       onEdit: selected === null ? null : () => { setFormMode('edit') },
       onToggle: selected === null ? null : async () => {
         const result = await call('toggle', { id: selected.id, enabled: selected.status !== 'active' })
@@ -128,8 +132,8 @@ export function CronPage(props) {
     })
 
   return h('div', { className: `dsh-cron-page${selected !== null || formMode !== 'none' ? ' dsh-cron-has-detail' : ''}` },
-    snapshot.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' },
-      `${t('error')}: ${snapshot.error ?? ''}`),
+    offline && h('p', { className: 'dsh-cron-banner-error', role: 'alert' },
+      `${t('banner.disconnected')}${snapshot.error ? `（${snapshot.error}）` : ''}`),
     h('div', { className: 'dsh-cron-master' },
       h('div', { className: 'dsh-cron-toolbar' },
         h('input', {
@@ -145,7 +149,7 @@ export function CronPage(props) {
               label: t(`filter.${value}`), onSelect: setStatus,
             }))),
         h('button', {
-          type: 'button', className: 'dsh-cron-new',
+          type: 'button', className: 'dsh-cron-new', disabled: offline,
           onClick: () => { setSelectedId(null); setFormMode('create') },
         }, t('form.new'))),
       snapshot.phase === 'loading' && h('p', { className: 'dsh-cron-hint' }, t('loading')),

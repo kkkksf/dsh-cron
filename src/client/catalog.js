@@ -41,6 +41,26 @@ export const CRON_DESCRIPTORS = Object.freeze(['list', 'create', 'update', 'togg
   })))
 
 /**
+ * Defensive projection of one catalog snapshot: a crashed or stale read
+ * must never take the whole panel down (a slot contribution that throws is
+ * silently unmounted), so missing containers become empty arrays and a
+ * missing snapshot reads as loading.
+ * @param {object | null | undefined} snapshot - raw snapshot.
+ * @returns {{ phase: string, workspaces: Array, automations: Array, error: string | null }} guarded snapshot.
+ */
+export function withDefaults(snapshot) {
+  if (snapshot === null || typeof snapshot !== 'object') {
+    return { phase: 'loading', workspaces: [], automations: [], error: null }
+  }
+  return {
+    phase: typeof snapshot.phase === 'string' ? snapshot.phase : 'loading',
+    workspaces: Array.isArray(snapshot.workspaces) ? snapshot.workspaces : [],
+    automations: Array.isArray(snapshot.automations) ? snapshot.automations : [],
+    error: snapshot.error ?? null,
+  }
+}
+
+/**
  * One catalog source: a loading/ready/error snapshot store refreshed by
  * polling, by post-mutation refetch, and by connection reset.
  * @param {{ call: (method: string, request: object) => Promise<{ok: boolean, value?: object, error?: {message?: string}}>,

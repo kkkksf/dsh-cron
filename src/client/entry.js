@@ -5,7 +5,7 @@
  */
 
 exports.name = 'dsh-cron-client'
-exports.inject = ['slots', 'locale', 'remote', 'typert']
+exports.inject = ['slots', 'locale', 'remote', 'typert', 'uiWorkspace']
 exports.apply = function apply(ctx) {
   ctx.effect(() => ctx.locale.register('cron.manager', {
     zh: {
@@ -14,6 +14,12 @@ exports.apply = function apply(ctx) {
       'filter.all': '全部', 'filter.active': '启用', 'filter.paused': '停用', 'filter.completed': '已完结',
       'list.untitled': '未命名任务', 'list.empty': '没有匹配的自动化', 'list.next': '下次', 'list.noNext': '无下次执行',
       'schedule.interval': '每 {seconds} 秒', 'schedule.once': '一次性',
+      'detail.empty': '选择一个任务查看详情', 'detail.edit': '编辑', 'detail.pause': '停用', 'detail.resume': '启用',
+      'detail.delete': '删除', 'detail.workspace': '工作区', 'detail.model': '模型路由', 'detail.schedule': '调度规则',
+      'detail.next': '下次执行', 'detail.last': '最近执行', 'detail.runs': '执行次数', 'detail.history': '运行历史',
+      'detail.noRuns': '还没有运行记录', 'detail.more': '加载更多', 'detail.openSession': '打开会话',
+      'detail.sessionUnavailable': '无法打开会话',
+      'run.succeeded': '成功', 'run.failed': '失败', 'run.skipped': '跳过', 'run.claimed': '已认领', 'run.running': '运行中', 'run.unknown': '未知',
     },
     en: {
       panel: 'Cron Tasks', loading: 'Loading…', error: 'Load failed',
@@ -21,6 +27,12 @@ exports.apply = function apply(ctx) {
       'filter.all': 'All', 'filter.active': 'Active', 'filter.paused': 'Paused', 'filter.completed': 'Completed',
       'list.untitled': 'Untitled', 'list.empty': 'No matching automations', 'list.next': 'next', 'list.noNext': 'no next run',
       'schedule.interval': 'every {seconds}s', 'schedule.once': 'one-shot',
+      'detail.empty': 'Select a task to see details', 'detail.edit': 'Edit', 'detail.pause': 'Pause', 'detail.resume': 'Resume',
+      'detail.delete': 'Delete', 'detail.workspace': 'Workspace', 'detail.model': 'Model route', 'detail.schedule': 'Schedule',
+      'detail.next': 'Next run', 'detail.last': 'Last run', 'detail.runs': 'Runs', 'detail.history': 'Run history',
+      'detail.noRuns': 'No runs yet', 'detail.more': 'Load more', 'detail.openSession': 'Open session',
+      'detail.sessionUnavailable': 'Cannot open session',
+      'run.succeeded': 'succeeded', 'run.failed': 'failed', 'run.skipped': 'skipped', 'run.claimed': 'claimed', 'run.running': 'running', 'run.unknown': 'unknown',
     },
   }), 'dsh-cron client: locale')
 
@@ -46,7 +58,15 @@ exports.apply = function apply(ctx) {
       // rides `catalogSource` and the page subscribes locally (dsh-memory
       // pattern; the framework-bound use<Name> route needs the renderer's
       // own hook machinery, unavailable to a hand-written bundle).
-      inject: () => ({ catalogSource: source.hooks.catalog, t }),
+      inject: () => ({
+        catalogSource: source.hooks.catalog,
+        call: (method, request) => (request === undefined
+          ? cronNamespace[method]()
+          : cronNamespace[method](request)),
+        openSession: id => ctx.uiWorkspace.openSession(id),
+        refresh: () => source.refresh(),
+        t,
+      }),
     },
     CronPage,
   )), 'dsh-cron client: main panel')

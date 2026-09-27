@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const FILES = ['catalog.js', 'list.js', 'page.js', 'entry.js']
+const FILES = ['catalog.js', 'list.js', 'detail-source.js', 'detail.js', 'page.js', 'entry.js']
 
 /** One module's browser-half text: imports stripped, exports localized. */
 function transform(source) {

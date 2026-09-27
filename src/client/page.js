@@ -1,10 +1,11 @@
 /**
- * The cron panel main page (Task 4 minimal: real catalog data as a plain
- * list). Later tasks grow the master-detail UI here; components receive all
- * data through injected props (catalog snapshot + actions), never ctx.
+ * The cron panel main page: toolbar (search / status filter) + automation
+ * list. Components receive all data through injected props (catalog snapshot
+ * source + actions), never ctx.
  */
 
 import { createElement as h, useState, useEffect } from 'react'
+import { filterAutomations, scheduleSummary, relativeTime } from './list.js'
 
 /** Local subscription over one observable snapshot prop (dsh-memory pattern). */
 function useSnapshot(source) {
@@ -13,19 +14,78 @@ function useSnapshot(source) {
   return snap
 }
 
-/** Minimal panel page: catalog phase + automation titles. */
+/** One status bucket's filter chip. */
+function FilterChip({ value, active, label, onSelect }) {
+  return h('button', {
+    type: 'button',
+    className: `dsh-cron-chip${active ? ' dsh-cron-chip-active' : ''}`,
+    'aria-pressed': active,
+    onClick: () => { onSelect(value) },
+  }, label)
+}
+
+/** One automation row. */
+function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
+  const workspace = (workspaces ?? []).find(w => w.id === entry.workspaceId)
+  const summary = scheduleSummary(entry.schedule, {
+    cron: s => s.expression ?? '',
+    interval: s => t('schedule.interval', { seconds: s.everySeconds ?? 0 }),
+    once: s => t('schedule.once'),
+  })
+  const next = entry.nextAt === null
+    ? t('list.noNext')
+    : `${t('list.next')} ${relativeTime(entry.nextAt, Date.now())}`
+  return h('button', {
+    type: 'button',
+    className: `dsh-cron-row${selected ? ' dsh-cron-row-selected' : ''}`,
+    onClick: () => { onSelect(entry.id) },
+  },
+    h('span', { className: `dsh-cron-dot dsh-cron-dot-${entry.status ?? 'active'}`, 'aria-hidden': 'true' }),
+    h('span', { className: 'dsh-cron-row-main' },
+      h('span', { className: 'dsh-cron-row-title' }, entry.title ?? t('list.untitled')),
+      h('span', { className: 'dsh-cron-row-sub' },
+        `${summary} · ${next}`)),
+    h('span', { className: 'dsh-cron-row-badge' }, workspace?.name ?? entry.workspaceId ?? ''),
+  )
+}
+
+/** The cron panel page. */
 export function CronPage(props) {
   const source = props.catalogSource
   const snapshot = source ? useSnapshot(source) : { phase: 'loading', automations: [] }
   const automations = snapshot.automations ?? []
+  const workspaces = snapshot.workspaces ?? []
   const t = props.t ?? (() => '')
-  return h('div', { style: { padding: '24px', fontSize: '14px' } },
-    h('h2', { style: { margin: '0 0 12px', fontSize: '16px' } }, t('panel')),
-    snapshot.phase === 'error' && h('p', { style: { color: 'var(--dsw-color-danger, #d33)' } },
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
+  const [selectedId, setSelectedId] = useState(null)
+  const visible = filterAutomations(automations, { query, status })
+
+  return h('div', { className: 'dsh-cron-page' },
+    snapshot.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' },
       `${t('error')}: ${snapshot.error ?? ''}`),
-    snapshot.phase === 'loading' && h('p', null, t('loading')),
-    h('ul', null, automations.map(entry =>
-      h('li', { key: entry.id }, `${entry.title ?? entry.id} [${entry.status ?? '?'}]`))),
+    h('div', { className: 'dsh-cron-toolbar' },
+      h('input', {
+        type: 'search', className: 'dsh-cron-search',
+        placeholder: t('search.placeholder'), value: query,
+        onChange: event => { setQuery(event.target.value) },
+        'aria-label': t('search.placeholder'),
+      }),
+      h('div', { className: 'dsh-cron-filters', role: 'group', 'aria-label': t('filter.group') },
+        ['all', 'active', 'paused', 'completed'].map(value =>
+          h(FilterChip, {
+            key: value, value, active: status === value,
+            label: t(`filter.${value}`), onSelect: setStatus,
+          }))),
+    ),
+    snapshot.phase === 'loading' && h('p', { className: 'dsh-cron-hint' }, t('loading')),
+    h('div', { className: 'dsh-cron-list', role: 'list' },
+      visible.length === 0 && snapshot.phase === 'ready' && h('p', { className: 'dsh-cron-hint' }, t('list.empty')),
+      visible.map(entry => h(AutomationRow, {
+        key: entry.id, entry, workspaces, selected: entry.id === selectedId,
+        onSelect: setSelectedId, t,
+      })),
+    ),
   )
 }
 

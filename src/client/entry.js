@@ -8,8 +8,20 @@ exports.name = 'dsh-cron-client'
 exports.inject = ['slots', 'locale', 'remote', 'typert']
 exports.apply = function apply(ctx) {
   ctx.effect(() => ctx.locale.register('cron.manager', {
-    zh: { panel: '定时任务', loading: '加载中…', error: '加载失败' },
-    en: { panel: 'Cron Tasks', loading: 'Loading…', error: 'Load failed' },
+    zh: {
+      panel: '定时任务', loading: '加载中…', error: '加载失败',
+      'search.placeholder': '搜索标题 / 提示词 / 表达式', 'filter.group': '状态筛选',
+      'filter.all': '全部', 'filter.active': '启用', 'filter.paused': '停用', 'filter.completed': '已完结',
+      'list.untitled': '未命名任务', 'list.empty': '没有匹配的自动化', 'list.next': '下次', 'list.noNext': '无下次执行',
+      'schedule.interval': '每 {seconds} 秒', 'schedule.once': '一次性',
+    },
+    en: {
+      panel: 'Cron Tasks', loading: 'Loading…', error: 'Load failed',
+      'search.placeholder': 'Search title / prompt / expression', 'filter.group': 'Status filter',
+      'filter.all': 'All', 'filter.active': 'Active', 'filter.paused': 'Paused', 'filter.completed': 'Completed',
+      'list.untitled': 'Untitled', 'list.empty': 'No matching automations', 'list.next': 'next', 'list.noNext': 'no next run',
+      'schedule.interval': 'every {seconds}s', 'schedule.once': 'one-shot',
+    },
   }), 'dsh-cron client: locale')
 
   const t = ctx.locale.bind('cron.manager')

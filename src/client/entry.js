@@ -3,10 +3,12 @@
  * catalog, and registers the sidebar icon + keyed main panel. All cleanup
  * rides the plugin fiber's effect disposer.
  */
+import { installStyles } from './styles.js'
 
 exports.name = 'dsh-cron-client'
 exports.inject = ['slots', 'locale', 'remote', 'typert', 'uiWorkspace']
 exports.apply = function apply(ctx) {
+  installStyles()
   ctx.effect(() => ctx.locale.register('cron.manager', {
     zh: {
       panel: '定时任务', loading: '加载中…', error: '加载失败',

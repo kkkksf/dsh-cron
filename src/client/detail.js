@@ -7,6 +7,7 @@
 import { createElement as h, useState, useEffect } from 'react'
 import { scheduleSummary, relativeTime } from './list.js'
 import { createHistorySource } from './detail-source.js'
+import { createActionFeedback } from './actions.js'
 
 /** One run-history row. */
 function RunRow({ run, openSession, t }) {
@@ -35,10 +36,15 @@ export function DetailPane({ entry, workspaces, call, openSession, onEdit, onTog
   const [historySource] = useState(() => createHistorySource({ call }))
   const [historyLimit, setHistoryLimit] = useState(10)
   const [snap, setSnap] = useState(() => historySource.hooks.history.getSnapshot())
+  const [feedbackMachine] = useState(() => createActionFeedback())
+  const [actionState, setActionState] = useState(() => feedbackMachine.snapshot())
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
   useEffect(() => {
     setSnap(historySource.hooks.history.getSnapshot())
     return historySource.hooks.history.subscribe(() => setSnap(historySource.hooks.history.getSnapshot()))
   }, [historySource])
+  useEffect(() => feedbackMachine.subscribe(() => setActionState(feedbackMachine.snapshot())), [feedbackMachine])
+  useEffect(() => { setConfirmingDelete(false) }, [entry?.id])
   useEffect(() => {
     if (entry?.id !== undefined) void historySource.load(entry.id, historyLimit)
   }, [historySource, entry?.id, historyLimit])
@@ -46,6 +52,14 @@ export function DetailPane({ entry, workspaces, call, openSession, onEdit, onTog
   if (entry === null || entry === undefined) {
     return h('div', { className: 'dsh-cron-detail dsh-cron-detail-empty' },
       h('p', { className: 'dsh-cron-hint' }, t('detail.empty')))
+  }
+
+  const busy = actionState.phase === 'busy'
+  const runToggle = () => {
+    void feedbackMachine.run('toggle', async () => onToggle())
+  }
+  const runDelete = () => {
+    void feedbackMachine.run('delete', async () => onDelete())
   }
 
   const workspace = (workspaces ?? []).find(w => w.id === entry.workspaceId)
@@ -62,10 +76,21 @@ export function DetailPane({ entry, workspaces, call, openSession, onEdit, onTog
     h('div', { className: 'dsh-cron-detail-head' },
       h('h3', { className: 'dsh-cron-detail-title' }, entry.title ?? t('list.untitled')),
       h('div', { className: 'dsh-cron-detail-actions' },
-        h('button', { type: 'button', onClick: onEdit }, t('detail.edit')),
-        entry.status !== 'completed' && h('button', { type: 'button', onClick: onToggle },
+        h('button', { type: 'button', disabled: busy, onClick: onEdit }, t('detail.edit')),
+        entry.status !== 'completed' && h('button', { type: 'button', disabled: busy, onClick: runToggle },
           entry.status === 'active' ? t('detail.pause') : t('detail.resume')),
-        h('button', { type: 'button', className: 'dsh-cron-danger', onClick: onDelete }, t('detail.delete')))),
+        !confirmingDelete && h('button', {
+          type: 'button', className: 'dsh-cron-danger', disabled: busy,
+          onClick: () => { setConfirmingDelete(true) },
+        }, t('detail.delete')),
+        confirmingDelete && h('span', { className: 'dsh-cron-confirm' },
+          h('span', null, t('detail.confirmDelete')),
+          h('button', {
+            type: 'button', className: 'dsh-cron-danger', disabled: busy,
+            onClick: runDelete,
+          }, t('detail.delete')),
+          h('button', { type: 'button', disabled: busy, onClick: () => { setConfirmingDelete(false) } }, t('form.cancel'))))),
+    actionState.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' }, actionState.message ?? ''),
     field(t('detail.workspace'), workspace?.name ?? entry.workspaceId ?? ''),
     field(t('detail.model'), entry.model ?? ''),
     field(t('detail.schedule'), summary),

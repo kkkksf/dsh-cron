@@ -18,6 +18,7 @@ import Schema from '@deepseek-ai/schemastery'
 import { createCronCommand } from './commands.js'
 import { validTimeZone } from './domain.js'
 import { createRunner } from './runner.js'
+import { CronRemoteService } from './remote.js'
 import { CronScheduler } from './scheduler.js'
 import { CronStore } from './store.js'
 import { registerCronTools } from './tools.js'
@@ -82,6 +83,13 @@ export function apply(ctx, config = {}) {
     getWorkspace: workspaceId => registry?.get(workspaceId),
   }, store.automations, store.runs)
   const scheduler = new CronScheduler(store.automations, store.runs, runner)
+  // The browser panel's single read/write path over the same tables.
+  new CronRemoteService(ctx, {
+    automations: store.automations,
+    runs: store.runs,
+    defaultTimeZone,
+    listWorkspaces: () => registry?.list().map(w => ({ id: w.id, name: w.title, path: w.path })) ?? [],
+  })
   // Restart reconciliation: fail claims orphaned by the previous process,
   // then run one pass so overdue work fires without waiting a full tick.
   void scheduler.sweepInterrupted().then(() => {

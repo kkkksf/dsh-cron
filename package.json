@@ -6,14 +6,30 @@
   "main": "src/index.js",
   "exports": {
     ".": "./src/index.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
     }
+  },
+  "scripts": {
+    "test": "node --test \"tests/**/*.spec.mjs\"",
+    "build:client": "node scripts/build-client.mjs"
   },
   "dependencies": {
     "croner": "^10.0.1"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-typert-protocol": ">=0.1.0"
   }
 }

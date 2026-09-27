@@ -55,10 +55,10 @@
 
 | 方法 | 入参 | 出参 |
 |---|---|---|
-| `list()` | — | `{ workspaces: {id,name,path}[], automations: CatalogEntry[] }`，含算好的 `nextRunAt` 与最近一次运行状态 |
-| `create(request)` | `{ workspaceId, title, prompt, model, schedule（三选一：cronExpression+timeZone / delayMinutes / interval+unit）, maxRuns? }` | 新建的 `CatalogEntry` |
+| `list()` | — | `{ workspaces: {id,name,path}[], automations: CatalogEntry[] }`，含算好的 `nextAt` 与最近一次运行状态；`CatalogEntry` 字段以 store 记录为准（含 `runCount`） |
+| `create(request)` | `{ workspaceId, title, prompt, model, schedule 选择器（与 cron_create 工具同一词汇：cron_expression+time_zone / delay_minutes / interval+interval_unit 三选一）, max_runs? }` | 新建的 `CatalogEntry` |
 | `update(request)` | `{ id, expected: {nextAtMs}, 变更字段… }` | `{ outcome: 'updated' \| 'conflict', entry }`；`nextAtMs` 不匹配 → `outcome:'conflict'` 并附最新 entry（对调度器的乐观锁；不用错误分支，避免依赖传输层错误码） |
-| `toggle(request)` | `{ id, enabled }` | entry；停用清 `nextAt`，启用按 `resumeNextAtMs` 重算 |
+| `toggle(request)` | `{ id, enabled }` | `{ outcome, entry }`（与 update 同形；经 applyUpdate 的 enabled 分支——暂停保留 nextAt（store 不变量），恢复按 `resumeNextAtMs` 重算；completed 记录报错） |
 | `delete(request)` | `{ id }` | `{ id, deleted }`（连带删除 run 记录） |
 | `history(request)` | `{ id, limit? }` | `{ runs: RunRecord[] }`（时间、状态、耗时、产生的 sessionId） |
 
@@ -71,9 +71,11 @@
 
 实现要点：
 
-- `CronRemoteService` 在插件 `apply` 里于现有 store 单例之上实例化；方法用
-  协议包的 `Remote` 装饰器标记。
-- 校验复用 `compileCron` / `validTimeZone` / `splitModelRoute`。
+- `CronRemoteService` 在插件 `apply` 里于现有 store 单例之上实例化；方法标记
+  采用协议的版本化原型描述符（纯 JS 不能用装饰器语法）。
+- 校验与状态迁移**直接复用 `manage.js` 的 `prepareCreate` / `applyUpdate` /
+  `buildSchedule`**（工具与浏览器共用同一套语义；schedule 词汇沿用工具的
+  snake_case 选择器）。
 - 服务导出形状须兼容 vendored loader 的 `unwrapExports`
   （`exports.default ?? exports`）。
 

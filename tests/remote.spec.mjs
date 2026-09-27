@@ -103,3 +103,51 @@ test('update() 乐观锁：expectedNextAt 过期返回 conflict 与最新 entry'
   assert.equal(missing.ok, false)
   assert.match(missing.error.message, /cron_not_found/)
 })
+
+test('toggle 往返与 completed 拒绝', async () => {
+  const tables = makeTables()
+  const service = new CronRemoteService(fakeCtx(), {
+    ...tables, defaultTimeZone: 'Asia/Shanghai', listWorkspaces: () => [],
+  })
+  const paused = await service.toggle({ id: 'cron-1', enabled: false })
+  assert.equal(paused.value.outcome, 'updated')
+  assert.equal(paused.value.entry.status, 'paused')
+  assert.equal(paused.value.entry.nextAt, '2026-09-28T01:00:00.000Z') // store 不变量：暂停不清 nextAt
+  const resumed = await service.toggle({ id: 'cron-1', enabled: true })
+  assert.equal(resumed.value.entry.status, 'active')
+  assert.ok(resumed.value.entry.nextAt !== null) // resumeNextAtMs 重算
+
+  tables.automations.put('cron-2', {
+    id: 'cron-2', workspaceId: 'ws-a', title: 'x', prompt: 'x', model: 'p/m',
+    status: 'completed', schedule: { kind: 'once', runAt: '2000-01-01T00:00:00.000Z' },
+    maxRuns: 1, nextAt: null, lastRunAt: null, lastRunStatus: null,
+    runCount: 1, createdAt: '2000-01-01T00:00:00.000Z', updatedAt: '2000-01-01T00:00:00.000Z',
+  })
+  const refused = await service.toggle({ id: 'cron-2', enabled: true })
+  assert.equal(refused.ok, false)
+  assert.match(refused.error.message, /cron_completed/)
+})
+
+test('delete 连带清 run 记录；history 按时间降序', async () => {
+  const tables = makeTables()
+  tables.runs.put('run-2', { id: 'run-2', cronId: 'cron-1', status: 'succeeded',
+    occurrenceAt: 't', startedAt: '2026-09-27T02:00:00.000Z',
+    finishedAt: '2026-09-27T02:00:05.000Z', durationMs: 5000,
+    sessionId: 's-2', error: null })
+  tables.runs.put('run-1', { id: 'run-1', cronId: 'cron-1', status: 'failed',
+    occurrenceAt: 't', startedAt: '2026-09-27T01:00:00.000Z',
+    finishedAt: '2026-09-27T01:00:01.000Z', durationMs: 1000,
+    sessionId: null, error: 'boom' })
+  const service = new CronRemoteService(fakeCtx(), {
+    ...tables, defaultTimeZone: 'Asia/Shanghai', listWorkspaces: () => [],
+  })
+  const history = await service.history({ id: 'cron-1' })
+  assert.deepEqual(history.value.runs.map(r => r.id), ['run-2', 'run-1'])
+
+  const gone = await service.delete({ id: 'cron-1' })
+  assert.equal(gone.value.deleted, true)
+  assert.equal([...tables.runs.entries()].length, 0)
+  const missing = await service.history({ id: 'cron-1' })
+  assert.equal(missing.ok, false)
+  assert.match(missing.error.message, /cron_not_found/)
+})

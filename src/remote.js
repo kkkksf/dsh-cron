@@ -81,6 +81,56 @@ export class CronRemoteService extends TypertRemoteService {
       return failure(error)
     }
   }
+
+  /** Enable/disable over the update path; completed records refuse revival. */
+  async toggle(request) {
+    try {
+      const current = this.#deps.automations.get(request.id)
+      if (current === undefined) {
+        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
+      }
+      if (current.status === 'completed') {
+        throw new Error(`cron_completed: the automation already completed; create a new one instead`)
+      }
+      return await this.update({ id: request.id, expectedNextAt: current.nextAt, changes: { enabled: request.enabled } })
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  /** Delete one automation together with its run records. */
+  async delete(request) {
+    try {
+      if (this.#deps.automations.get(request.id) === undefined) {
+        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
+      }
+      for (const [runId, run] of this.#deps.runs.entries()) {
+        if (run.cronId === request.id) await this.#deps.runs.delete(runId)
+      }
+      await this.#deps.automations.delete(request.id)
+      return { ok: true, value: { id: request.id, deleted: true } }
+    } catch (error) {
+      return failure(error)
+    }
+  }
+
+  /** Run history of one automation, newest first. */
+  async history(request) {
+    try {
+      if (this.#deps.automations.get(request.id) === undefined) {
+        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
+      }
+      const limit = Math.min(Math.max(request.limit ?? 20, 1), 200)
+      const runs = [...this.#deps.runs.entries()]
+        .map(([, run]) => run)
+        .filter(run => run.cronId === request.id)
+        .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+        .slice(0, limit)
+      return { ok: true, value: { runs } }
+    } catch (error) {
+      return failure(error)
+    }
+  }
 }
 
 /** Fold one thrown error into the Remote failure branch (wire-identical to throwing). */
@@ -98,6 +148,9 @@ Object.defineProperty(CronRemoteService.prototype,
         { method: 'list', invocation: Object.freeze({ kind: 'direct' }) },
         { method: 'create', invocation: Object.freeze({ kind: 'direct' }) },
         { method: 'update', invocation: Object.freeze({ kind: 'direct' }) },
+        { method: 'toggle', invocation: Object.freeze({ kind: 'direct' }) },
+        { method: 'delete', invocation: Object.freeze({ kind: 'direct' }) },
+        { method: 'history', invocation: Object.freeze({ kind: 'direct' }) },
       ]),
     }),
   })

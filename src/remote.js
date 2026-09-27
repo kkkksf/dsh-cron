@@ -1,9 +1,11 @@
 /**
  * The browser-facing Remote service over the cron store: the panel's single
  * read/write path, sharing store.js durability and manage.js validation with
- * the model tools. Method markers are attached after the class definition
- * (plain-JS plugins cannot use decorator syntax); the shape is the protocol's
- * versioned prototype descriptor.
+ * the model tools. Methods return bare business values and throw on failure
+ * (the gateway folds throws into the client-side error envelope, matching
+ * every in-repo TypertRemoteService). Method markers are attached after the
+ * class definition (plain-JS plugins cannot use decorator syntax); the shape
+ * is the protocol's versioned prototype descriptor.
  */
 
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -28,114 +30,98 @@ export class CronRemoteService extends TypertRemoteService {
    */
   constructor(ctx, deps) {
     super(ctx, 'cron')
-    this.#deps = deps
+    // Plain property, not a #private field: the gateway invokes Remote
+    // methods through the Cordis service proxy, and private fields do not
+    // survive a proxy receiver.
+    this.cronDeps = deps
   }
 
-  #deps
+  cronDeps
 
   /** Full catalog for the panel: every workspace's automations plus the workspace list. */
   async list() {
-    return { ok: true, value: {
-      workspaces: this.#deps.listWorkspaces(),
-      automations: [...this.#deps.automations.entries()].map(([, record]) => toEntry(record)),
-    } }
+    return {
+      workspaces: this.cronDeps.listWorkspaces(),
+      automations: [...this.cronDeps.automations.entries()].map(([, record]) => toEntry(record)),
+    }
   }
 
   /** One remote-writable create over prepareCreate. */
   async create(request) {
-    try {
-      const nowMs = Date.now()
-      const record = prepareCreate({
-        workspaceId: request.workspaceId,
-        title: request.title,
-        prompt: request.prompt,
-        model: request.model,
-        ...(request.max_runs === undefined ? {} : { maxRuns: request.max_runs }),
-      }, request.selector, this.#deps.defaultTimeZone, nowMs)
-      await this.#deps.automations.put(record.id, record)
-      return { ok: true, value: toEntry(record) }
-    } catch (error) {
-      return failure(error)
+    const workspaces = this.cronDeps.listWorkspaces()
+    if (request.workspaceId === undefined || request.workspaceId === null
+      || String(request.workspaceId).trim() === ''
+      || (workspaces.length > 0 && !workspaces.some(w => w.id === request.workspaceId))) {
+      throw new Error(`workspace_not_found: no workspace ${JSON.stringify(request.workspaceId)}`)
     }
+    const nowMs = Date.now()
+    const record = prepareCreate({
+      workspaceId: request.workspaceId,
+      title: request.title,
+      prompt: request.prompt,
+      model: request.model,
+      ...(request.max_runs === undefined ? {} : { maxRuns: request.max_runs }),
+    }, request.selector, this.cronDeps.defaultTimeZone, nowMs)
+    await this.cronDeps.automations.put(record.id, record)
+    return toEntry(record)
   }
 
   /** One remote-writable update over applyUpdate, guarded by the optimistic lock. */
   async update(request) {
-    try {
-      if (this.#deps.automations.get(request.id) === undefined) {
-        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
-      }
-      const nowMs = Date.now()
-      let conflict = null
-      const next = await this.#deps.automations.update(request.id, (current) => {
-        if (current.nextAt !== request.expectedNextAt) {
-          conflict = current
-          return current
-        }
-        return applyUpdate(current, request.changes, request.changes.selector,
-          request.changes.selector !== undefined, this.#deps.defaultTimeZone, nowMs)
-      })
-      if (conflict !== null) return { ok: true, value: { outcome: 'conflict', entry: toEntry(conflict) } }
-      return { ok: true, value: { outcome: 'updated', entry: toEntry(next) } }
-    } catch (error) {
-      return failure(error)
+    if (this.cronDeps.automations.get(request.id) === undefined) {
+      throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
     }
+    const nowMs = Date.now()
+    let conflict = null
+    const next = await this.cronDeps.automations.update(request.id, (current) => {
+      if (current.nextAt !== request.expectedNextAt) {
+        conflict = current
+        return current
+      }
+      return applyUpdate(current, request.changes, request.changes.selector,
+        request.changes.selector !== undefined, this.cronDeps.defaultTimeZone, nowMs)
+    })
+    if (conflict !== null) return { outcome: 'conflict', entry: toEntry(conflict) }
+    return { outcome: 'updated', entry: toEntry(next) }
   }
 
   /** Enable/disable over the update path; completed records refuse revival. */
   async toggle(request) {
-    try {
-      const current = this.#deps.automations.get(request.id)
-      if (current === undefined) {
-        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
-      }
-      if (current.status === 'completed') {
-        throw new Error(`cron_completed: the automation already completed; create a new one instead`)
-      }
-      return await this.update({ id: request.id, expectedNextAt: current.nextAt, changes: { enabled: request.enabled } })
-    } catch (error) {
-      return failure(error)
+    const current = this.cronDeps.automations.get(request.id)
+    if (current === undefined) {
+      throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
     }
+    if (current.status === 'completed') {
+      throw new Error('cron_completed: the automation already completed; create a new one instead')
+    }
+    return this.update({ id: request.id, expectedNextAt: current.nextAt, changes: { enabled: request.enabled } })
   }
 
   /** Delete one automation together with its run records. */
   async delete(request) {
-    try {
-      if (this.#deps.automations.get(request.id) === undefined) {
-        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
-      }
-      for (const [runId, run] of this.#deps.runs.entries()) {
-        if (run.cronId === request.id) await this.#deps.runs.delete(runId)
-      }
-      await this.#deps.automations.delete(request.id)
-      return { ok: true, value: { id: request.id, deleted: true } }
-    } catch (error) {
-      return failure(error)
+    if (this.cronDeps.automations.get(request.id) === undefined) {
+      throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
     }
+    for (const [runId, run] of this.cronDeps.runs.entries()) {
+      if (run.cronId === request.id) await this.cronDeps.runs.delete(runId)
+    }
+    await this.cronDeps.automations.delete(request.id)
+    return { id: request.id, deleted: true }
   }
 
   /** Run history of one automation, newest first. */
   async history(request) {
-    try {
-      if (this.#deps.automations.get(request.id) === undefined) {
-        throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
-      }
-      const limit = Math.min(Math.max(request.limit ?? 20, 1), 200)
-      const runs = [...this.#deps.runs.entries()]
-        .map(([, run]) => run)
-        .filter(run => run.cronId === request.id)
-        .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
-        .slice(0, limit)
-      return { ok: true, value: { runs } }
-    } catch (error) {
-      return failure(error)
+    if (this.cronDeps.automations.get(request.id) === undefined) {
+      throw new Error(`cron_not_found: no automation ${JSON.stringify(request.id)}`)
     }
+    const limit = Math.min(Math.max(request.limit ?? 20, 1), 200)
+    const runs = [...this.cronDeps.runs.entries()]
+      .map(([, run]) => run)
+      .filter(run => run.cronId === request.id)
+      .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
+      .slice(0, limit)
+    return { runs }
   }
-}
-
-/** Fold one thrown error into the Remote failure branch (wire-identical to throwing). */
-function failure(error) {
-  return { ok: false, error: { message: String(error?.message ?? error) } }
 }
 
 // Protocol method markers, attached in declaration order (see file header).

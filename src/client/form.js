@@ -6,7 +6,7 @@
  */
 
 import { createElement as h, useState } from 'react'
-import { validateDraft, serializeForm } from './form-logic.js'
+import { validateDraft, serializeForm, draftFromEntry } from './form-logic.js'
 
 /** One labeled input row with its inline error. */
 function Field({ label, error, children }) {
@@ -25,17 +25,10 @@ export function CronForm(props) {
   const t = props.t ?? (() => '')
   const entry = props.entry
   const [draft, setDraft] = useState(() => ({
-    title: entry?.title ?? '',
-    prompt: entry?.prompt ?? '',
+    ...draftFromEntry(entry),
     model: entry?.model ?? props.defaultModel ?? '',
     workspaceId: entry?.workspaceId ?? props.defaultWorkspaceId ?? '',
-    kind: entry?.schedule?.kind === 'interval' ? 'interval' : entry?.schedule?.kind === 'once' ? 'once' : 'cron',
-    cronExpression: entry?.schedule?.expression ?? '',
     timeZone: entry?.schedule?.timeZone ?? props.defaultTimeZone ?? '',
-    delayMinutes: '',
-    interval: '',
-    intervalUnit: 'minute',
-    maxRuns: entry?.maxRuns === null || entry?.maxRuns === undefined ? '' : String(entry.maxRuns),
   }))
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)

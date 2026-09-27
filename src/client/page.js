@@ -9,6 +9,13 @@ import { filterAutomations, scheduleSummary, relativeTime } from './list.js'
 import { withDefaults } from './catalog.js'
 import { DetailPane } from './detail.js'
 import { CronForm } from './form.js'
+import { editFormKey, scheduleChanged, localizeError } from './form-logic.js'
+
+/** Stand-in observable for a missing catalog source: stays loading forever. */
+const NO_SOURCE = {
+  getSnapshot: () => ({ phase: 'loading', workspaces: [], automations: [], error: null }),
+  subscribe: () => () => {},
+}
 
 /** Local subscription over one observable snapshot prop (dsh-memory pattern). */
 function useSnapshot(source) {
@@ -30,6 +37,7 @@ function FilterChip({ value, active, label, onSelect }) {
 /** One automation row. */
 function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
   const workspace = (workspaces ?? []).find(w => w.id === entry.workspaceId)
+  const units = { minute: t('time.minute'), hour: t('time.hour'), day: t('time.day') }
   const summary = scheduleSummary(entry.schedule, {
     cron: s => s.expression ?? '',
     interval: s => t('schedule.interval', { seconds: s.everySeconds ?? 0 }),
@@ -37,7 +45,7 @@ function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
   })
   const next = entry.nextAt === null
     ? t('list.noNext')
-    : `${t('list.next')} ${relativeTime(entry.nextAt, Date.now())}`
+    : `${t('list.next')} ${relativeTime(entry.nextAt, Date.now(), units)}`
   return h('button', {
     type: 'button',
     className: `dsh-cron-row${selected ? ' dsh-cron-row-selected' : ''}`,
@@ -54,13 +62,14 @@ function AutomationRow({ entry, workspaces, selected, onSelect, t }) {
 
 /** The cron panel page: toolbar + list on the left, detail/form on the right. */
 export function CronPage(props) {
-  const source = props.catalogSource
-  const rawSnapshot = source ? useSnapshot(source) : null
-  const snapshot = withDefaults(rawSnapshot)
+  // Hooks are unconditional (Rules of Hooks): a missing source reads as a
+  // perpetual loading state instead of crashing the panel slot.
+  const snapshot = withDefaults(useSnapshot(props.catalogSource ?? NO_SOURCE))
   const automations = snapshot.automations
   const workspaces = snapshot.workspaces
   const offline = snapshot.phase === 'error'
   const t = props.t ?? (() => '')
+  const localize = (message) => localizeError(message, t)
   const call = props.call
   const refresh = props.refresh ?? (() => {})
   const [query, setQuery] = useState('')
@@ -76,7 +85,7 @@ export function CronPage(props) {
   const submitForm = async (draft, wire) => {
     if (formMode === 'create') {
       const result = await call('create', wire)
-      if (result.ok !== true) return String(result.error?.message ?? result.error)
+      if (result.ok !== true) return localize(result.error?.message)
       setFormMode('none')
       setSelectedId(result.value?.id ?? null)
       await refresh()
@@ -89,11 +98,14 @@ export function CronPage(props) {
         title: wire.title,
         prompt: wire.prompt,
         model: wire.model,
-        ...(wire.max_runs === null ? {} : { max_runs: wire.max_runs }),
-        selector: wire.selector,
+        ...(wire.max_runs === undefined ? {} : { max_runs: wire.max_runs }),
+        // Only a real schedule change carries a selector: the host
+        // recomputes nextAt whenever one is present, which would silently
+        // skip a pending occurrence on a title-only edit.
+        ...(scheduleChanged(selected, draft) ? { selector: wire.selector } : {}),
       },
     })
-    if (result.ok !== true) return String(result.error?.message ?? result.error)
+    if (result.ok !== true) return localize(result.error?.message)
     await refresh()
     if (result.value?.outcome === 'conflict') return 'conflict'
     setFormMode('none')
@@ -120,10 +132,11 @@ export function CronPage(props) {
       t,
     })
     : h(CronForm, {
+      key: editFormKey(selected),
       mode: formMode,
       entry: formMode === 'edit' ? selected : null,
       workspaces,
-      defaultWorkspaceId: props.defaultWorkspaceId,
+      defaultWorkspaceId: props.defaultWorkspaceId ?? workspaces[0]?.id,
       defaultModel: props.defaultModel,
       defaultTimeZone: props.defaultTimeZone,
       onSubmit: submitForm,
@@ -133,7 +146,7 @@ export function CronPage(props) {
 
   return h('div', { className: `dsh-cron-page${selected !== null || formMode !== 'none' ? ' dsh-cron-has-detail' : ''}` },
     offline && h('p', { className: 'dsh-cron-banner-error', role: 'alert' },
-      `${t('banner.disconnected')}${snapshot.error ? `（${snapshot.error}）` : ''}`),
+      `${t('banner.disconnected')}${snapshot.error ? `（${localize(snapshot.error)}）` : ''}`),
     h('div', { className: 'dsh-cron-master' },
       h('div', { className: 'dsh-cron-toolbar' },
         h('input', {

@@ -44,9 +44,12 @@ test('scheduleSummary: 三种调度形态', () => {
   }), 'once 2000-01-01T00:00:00.000Z')
 })
 
-test('relativeTime: 未来/过去/空 三档', () => {
+test('relativeTime: 未来/过去/空 三档，单位文案本地化注入', () => {
   const now = Date.parse('2026-09-28T00:00:00.000Z')
-  assert.match(relativeTime('2026-09-28T00:05:00.000Z', now), /5/)
-  assert.match(relativeTime('2026-09-27T23:00:00.000Z', now), /1/)
-  assert.equal(relativeTime(null, now), '')
+  const zh = { minute: '分钟', hour: '小时', day: '天' }
+  const en = { minute: 'min', hour: 'h', day: 'd' }
+  assert.equal(relativeTime('2026-09-28T00:05:00.000Z', now, zh), '5 分钟')
+  assert.equal(relativeTime('2026-09-27T23:00:00.000Z', now, en), '1 h')
+  assert.equal(relativeTime('2026-09-25T00:00:00.000Z', now, zh), '3 天')
+  assert.equal(relativeTime(null, now, zh), '')
 })

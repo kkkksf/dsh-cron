@@ -41,18 +41,20 @@ export function scheduleSummary(schedule, renderers) {
 
 /**
  * Coarse relative time: minutes under an hour, hours under a day, days
- * beyond. Past and future share the same buckets with the sign in the text.
+ * beyond. Unit labels arrive from the locale (the numbers themselves are
+ * language-neutral).
  * @param {string | null} iso - the target instant, or null when none.
  * @param {number} nowMs - reference clock in epoch milliseconds.
- * @returns {string} localized-free bucket text like "5 分钟" / "3 小时", or '' when absent.
+ * @param {{ minute: string, hour: string, day: string }} units - locale unit labels.
+ * @returns {string} text like "5 分钟" / "3 h", or '' when absent.
  */
-export function relativeTime(iso, nowMs) {
+export function relativeTime(iso, nowMs, units = { minute: '分钟', hour: '小时', day: '天' }) {
   if (iso === null || iso === undefined) return ''
   const deltaMs = Date.parse(iso) - nowMs
   if (Number.isNaN(deltaMs)) return ''
   const minutes = Math.round(Math.abs(deltaMs) / 60_000)
-  if (minutes < 60) return `${minutes} 分钟`
+  if (minutes < 60) return `${minutes} ${units.minute}`
   const hours = Math.round(minutes / 60)
-  if (hours < 24) return `${hours} 小时`
-  return `${Math.round(hours / 24)} 天`
+  if (hours < 24) return `${hours} ${units.hour}`
+  return `${Math.round(hours / 24)} ${units.day}`
 }

@@ -52,3 +52,9 @@ test('validateDraft: 标题/prompt 空、model 路由格式、cron 五段', () =
   assert.match(validateDraft({ ...baseDraft, kind: 'once', delayMinutes: 'abc' }).delayMinutes ?? '', /./)
   assert.match(validateDraft({ ...baseDraft, kind: 'interval', interval: '' }).interval ?? '', /./)
 })
+
+test('validateDraft 的 once 错误键是错误描述而非字段标签', () => {
+  const errors = validateDraft({ ...baseDraft, kind: 'once', delayMinutes: 'abc' })
+  assert.notEqual(errors.delayMinutes, 'form.delayMinutes')
+  assert.equal(errors.delayMinutes, 'form.delayMinutesInvalid')
+})

@@ -8,6 +8,7 @@ import { createElement as h, useState, useEffect } from 'react'
 import { scheduleSummary, relativeTime } from './list.js'
 import { createHistorySource } from './detail-source.js'
 import { createActionFeedback } from './actions.js'
+import { localizeError } from './form-logic.js'
 
 /** One run-history row. */
 function RunRow({ run, openSession, t }) {
@@ -90,7 +91,8 @@ export function DetailPane({ entry, workspaces, call, openSession, offline = fal
             onClick: runDelete,
           }, t('detail.delete')),
           h('button', { type: 'button', disabled: busy, onClick: () => { setConfirmingDelete(false) } }, t('form.cancel'))))),
-    actionState.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' }, actionState.message ?? ''),
+    actionState.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' },
+      localizeError(actionState.message, t)),
     field(t('detail.workspace'), workspace?.name ?? entry.workspaceId ?? ''),
     field(t('detail.model'), entry.model ?? ''),
     field(t('detail.schedule'), summary),
@@ -99,7 +101,7 @@ export function DetailPane({ entry, workspaces, call, openSession, offline = fal
       `${entry.lastRunAt ?? ''} ${entry.lastRunStatus ?? ''}`.trim() || t('list.noNext')),
     field(t('detail.runs'), `${entry.runCount ?? 0}${entry.maxRuns === null ? '' : ` / ${entry.maxRuns}`}`),
     h('h4', { className: 'dsh-cron-history-title' }, t('detail.history')),
-    snap.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' }, `${t('error')}: ${snap.error ?? ''}`),
+    snap.phase === 'error' && h('p', { className: 'dsh-cron-banner-error' }, localizeError(snap.error, t)),
     (snap.runs ?? []).length === 0 && snap.phase === 'ready' && h('p', { className: 'dsh-cron-hint' }, t('detail.noRuns')),
     h('ul', { className: 'dsh-cron-runs' },
       (snap.runs ?? []).map(run => h(RunRow, { key: run.id, run, openSession, t }))),

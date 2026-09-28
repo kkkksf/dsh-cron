@@ -6,7 +6,7 @@
  */
 
 import { createElement as h, useState } from 'react'
-import { validateDraft, serializeForm, draftFromEntry } from './form-logic.js'
+import { validateDraft, serializeForm, draftFromEntry, TIMEZONES, optionsWithCurrent } from './form-logic.js'
 
 /** One labeled input row with its inline error. */
 function Field({ label, error, children }) {
@@ -28,7 +28,8 @@ export function CronForm(props) {
     ...draftFromEntry(entry),
     model: entry?.model ?? props.defaultModel ?? '',
     workspaceId: entry?.workspaceId ?? props.defaultWorkspaceId ?? '',
-    timeZone: entry?.schedule?.timeZone ?? props.defaultTimeZone ?? '',
+    // The select always shows a concrete zone; create starts at the default.
+    timeZone: entry?.schedule?.timeZone ?? props.defaultTimeZone ?? TIMEZONES[0],
   }))
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState(null)
@@ -70,8 +71,12 @@ export function CronForm(props) {
       }, (props.workspaces ?? []).map(w =>
         h('option', { key: w.id, value: w.id }, w.name ?? w.id)))),
     h(Field, { label: t('form.model'), error: err('model') },
-      h('input', { type: 'text', value: draft.model, placeholder: 'provider/model',
-        onChange: e => { edit('model', e.target.value) } })),
+      h('select', {
+        value: draft.model,
+        onChange: e => { edit('model', e.target.value) },
+      }, h('option', { value: '' }, t('form.modelPlaceholder')),
+        optionsWithCurrent(props.models, draft.model).map(route =>
+          h('option', { key: route, value: route }, route)))),
     h(Field, { label: t('form.scheduleKind'), error: undefined },
       h('select', { value: draft.kind, onChange: e => { edit('kind', e.target.value) } },
         h('option', { value: 'cron' }, t('form.kindCron')),
@@ -80,8 +85,10 @@ export function CronForm(props) {
     draft.kind === 'cron' && h(Field, { label: t('form.cronExpression'), error: err('cronExpression') },
       h('input', { type: 'text', value: draft.cronExpression, placeholder: '0 9 * * 1-5',
         onChange: e => { edit('cronExpression', e.target.value) } }),
-      h('input', { type: 'text', value: draft.timeZone, placeholder: 'Asia/Shanghai',
-        onChange: e => { edit('timeZone', e.target.value) } })),
+      h('select', { value: draft.timeZone, onChange: e => { edit('timeZone', e.target.value) } },
+        optionsWithCurrent(TIMEZONES, draft.timeZone).map(zone =>
+          h('option', { key: zone, value: zone }, zone))),
+      err('cronExpression') === undefined && h('span', { className: 'dsh-cron-form-hint' }, t('form.cronHint'))),
     draft.kind === 'interval' && h(Field, { label: t('form.interval'), error: err('interval') },
       h('input', { type: 'number', min: '1', value: draft.interval,
         onChange: e => { edit('interval', e.target.value) } }),

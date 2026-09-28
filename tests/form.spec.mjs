@@ -1,6 +1,21 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { serializeForm, validateDraft } from '../src/client/form-logic.js'
+import { serializeForm, validateDraft, TIMEZONES, optionsWithCurrent } from '../src/client/form-logic.js'
+
+test('optionsWithCurrent：未列出的当前值附加在尾部', () => {
+  assert.deepEqual(optionsWithCurrent(['a', 'b'], 'b'), ['a', 'b'])
+  assert.deepEqual(optionsWithCurrent(['a', 'b'], 'z'), ['a', 'b', 'z'])
+  assert.deepEqual(optionsWithCurrent(['a'], ''), ['a'])
+  assert.deepEqual(optionsWithCurrent(null, 'x'), ['x'])
+})
+
+test('TIMEZONES：含常用时区且默认上海在前', () => {
+  assert.ok(Array.isArray(TIMEZONES))
+  assert.equal(TIMEZONES[0], 'Asia/Shanghai')
+  for (const zone of ['UTC', 'Asia/Tokyo', 'Asia/Hong_Kong', 'Europe/London', 'America/New_York']) {
+    assert.ok(TIMEZONES.includes(zone), zone)
+  }
+})
 
 const baseDraft = {
   title: '巡检',

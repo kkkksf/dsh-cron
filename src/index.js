@@ -89,6 +89,18 @@ export function apply(ctx, config = {}) {
     runs: store.runs,
     defaultTimeZone,
     listWorkspaces: () => registry?.list().map(w => ({ id: w.id, name: w.title, path: w.path })) ?? [],
+    // Every configured provider/model route, for the form's dropdown. A
+    // missing llm service or a failing provider degrades to an empty list.
+    listModelRoutes: async () => {
+      const llm = ctx.get('llm')
+      const routes = []
+      for (const provider of llm.listProviders()) {
+        for (const model of await llm.listModels(provider.id)) {
+          routes.push(`${provider.id}/${model.id}`)
+        }
+      }
+      return routes
+    },
   })
   // Restart reconciliation: fail claims orphaned by the previous process,
   // then run one pass so overdue work fires without waiting a full tick.

@@ -4,6 +4,32 @@
  */
 
 /**
+ * Common IANA zones for the schedule timezone dropdown; Shanghai first as
+ * the deployment default. Values outside the list still render (the form
+ * appends the entry's stored zone).
+ */
+export const TIMEZONES = [
+  'Asia/Shanghai', 'UTC', 'Asia/Hong_Kong', 'Asia/Taipei', 'Asia/Tokyo',
+  'Asia/Singapore', 'Europe/London', 'Europe/Berlin', 'Europe/Moscow',
+  'America/New_York', 'America/Chicago', 'America/Los_Angeles',
+]
+
+/**
+ * Options for a dropdown that must include one possibly-unlisted current
+ * value: the base list plus the value appended when absent.
+ * @param {string[]} base - the listed options.
+ * @param {string} current - the currently selected value.
+ * @returns {string[]} options covering the current value.
+ */
+export function optionsWithCurrent(base, current) {
+  const list = [...(base ?? [])]
+  if (current !== undefined && current !== null && current !== '' && !list.includes(current)) {
+    list.push(current)
+  }
+  return list
+}
+
+/**
  * Client-side pre-validation of one draft. Returns a map of field → error
  * message; empty object means the draft may be submitted.
  * @param {object} draft - the live form draft.

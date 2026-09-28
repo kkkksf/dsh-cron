@@ -83,6 +83,7 @@ export function installStyles() {
   box-sizing: border-box; }
 .dsh-cron-form-field input:not(:last-child) { margin-bottom: 4px; }
 .dsh-cron-form-error { grid-column: 2; color: var(--dsw-alias-state-error-primary); font-size: 11px; }
+.dsh-cron-form-hint { grid-column: 2; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .dsh-cron-detail-empty { display: flex; align-items: center; justify-content: center; }
 `
   document.head.appendChild(style)

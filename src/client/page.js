@@ -136,6 +136,7 @@ export function CronPage(props) {
       mode: formMode,
       entry: formMode === 'edit' ? selected : null,
       workspaces,
+      models: snapshot.models,
       defaultWorkspaceId: props.defaultWorkspaceId ?? workspaces[0]?.id,
       defaultModel: props.defaultModel,
       defaultTimeZone: props.defaultTimeZone,

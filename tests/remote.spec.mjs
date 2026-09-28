@@ -50,12 +50,25 @@ test('list() 投影全部自动化与工作区名单', async () => {
   const service = new CronRemoteService(fakeCtx(), {
     ...tables, defaultTimeZone: 'Asia/Shanghai',
     listWorkspaces: () => [{ id: 'ws-a', name: 'flowagent', path: 'E:/x' }],
+    listModelRoutes: async () => ['zai-coding-cn/glm-5.3', 'deepseek-official/deepseek-v4-flash'],
   })
   const value = await service.list()
   assert.deepEqual(value.workspaces, [{ id: 'ws-a', name: 'flowagent', path: 'E:/x' }])
+  assert.deepEqual(value.models, ['zai-coding-cn/glm-5.3', 'deepseek-official/deepseek-v4-flash'])
   assert.equal(value.automations.length, 1)
   assert.deepEqual(Object.keys(value.automations[0]).sort(), ENTRY_KEYS.slice().sort())
   assert.equal(value.automations[0].schedule.expression, '0 9 * * 1-5')
+})
+
+test('list() 的模型清单拉取失败时降级为空数组', async () => {
+  const tables = makeTables()
+  const service = new CronRemoteService(fakeCtx(), {
+    ...tables, defaultTimeZone: 'Asia/Shanghai',
+    listWorkspaces: () => [],
+    listModelRoutes: async () => { throw new Error('no llm') },
+  })
+  const value = await service.list()
+  assert.deepEqual(value.models, [])
 })
 
 test('create() 建 cron 任务并算出 nextAt；非法表达式拒绝', async () => {

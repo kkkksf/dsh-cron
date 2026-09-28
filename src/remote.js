@@ -38,11 +38,20 @@ export class CronRemoteService extends TypertRemoteService {
 
   cronDeps
 
-  /** Full catalog for the panel: every workspace's automations plus the workspace list. */
+  /** Full catalog for the panel: automations, workspaces, and configured model routes. */
   async list() {
+    let models = []
+    try {
+      models = await this.cronDeps.listModelRoutes()
+    } catch {
+      // Model discovery is advisory for the form dropdown; the panel still
+      // renders when the llm service is absent or a provider fails.
+      models = []
+    }
     return {
       workspaces: this.cronDeps.listWorkspaces(),
       automations: [...this.cronDeps.automations.entries()].map(([, record]) => toEntry(record)),
+      models,
     }
   }
 

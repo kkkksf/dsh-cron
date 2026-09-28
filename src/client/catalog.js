@@ -46,16 +46,17 @@ export const CRON_DESCRIPTORS = Object.freeze(['list', 'create', 'update', 'togg
  * silently unmounted), so missing containers become empty arrays and a
  * missing snapshot reads as loading.
  * @param {object | null | undefined} snapshot - raw snapshot.
- * @returns {{ phase: string, workspaces: Array, automations: Array, error: string | null }} guarded snapshot.
+ * @returns {{ phase: string, workspaces: Array, automations: Array, models: Array, error: string | null }} guarded snapshot.
  */
 export function withDefaults(snapshot) {
   if (snapshot === null || typeof snapshot !== 'object') {
-    return { phase: 'loading', workspaces: [], automations: [], error: null }
+    return { phase: 'loading', workspaces: [], automations: [], models: [], error: null }
   }
   return {
     phase: typeof snapshot.phase === 'string' ? snapshot.phase : 'loading',
     workspaces: Array.isArray(snapshot.workspaces) ? snapshot.workspaces : [],
     automations: Array.isArray(snapshot.automations) ? snapshot.automations : [],
+    models: Array.isArray(snapshot.models) ? snapshot.models : [],
     error: snapshot.error ?? null,
   }
 }
@@ -63,13 +64,13 @@ export function withDefaults(snapshot) {
 /**
  * One catalog source: a loading/ready/error snapshot store refreshed by
  * polling, by post-mutation refetch, and by connection reset.
- * @param {{ call: (method: string, request: object) => Promise<{ok: boolean, value?: object, error?: {message?: string}}>,
+ * @param {{ call: (method: string, request?: object) => Promise<{ok: boolean, value?: object, error?: {message?: string}}>,
  *           intervalMs?: number }} options - remote call seam and poll cadence (0 = no timer).
- * @returns {{ hooks: { catalog: object }, refresh: () => Promise<void>, start: () => void, stop: () => void }} the source handle.
+ * @returns {{ hooks: { catalog: object }, refresh: () => Promise<void>, start: () => Promise<void>, stop: () => void }} the source handle.
  */
 export function createCatalogSource({ call, intervalMs = 5000 }) {
   const listeners = new Set()
-  let snapshot = { phase: 'loading', workspaces: [], automations: [], error: null }
+  let snapshot = { phase: 'loading', workspaces: [], automations: [], models: [], error: null }
   let timer = null
   let inflight = Promise.resolve()
 
@@ -89,6 +90,7 @@ export function createCatalogSource({ call, intervalMs = 5000 }) {
           phase: 'ready',
           workspaces: result.value?.workspaces ?? [],
           automations: result.value?.automations ?? [],
+          models: result.value?.models ?? [],
           error: null,
         })
       } catch (error) {
